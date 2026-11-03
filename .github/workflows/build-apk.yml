@@ -21,21 +21,18 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Setup Java JDK 21
+      - name: Setup Java JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Capacitor & Sync Android Project
+      - name: Install Dependencies & Initialize Android Project
         run: |
           mkdir -p www
           cp -f *.html *.css *.js *.json *.png *.jpg www/ 2>/dev/null || true
           npm install
-          npx cap add android
+          npx cap add android || true
           npx cap sync android
 
       - name: Inject Custom KK Creation Logo & StudyTrack Splash Screen
@@ -122,13 +119,13 @@ jobs:
           ./gradlew assembleDebug --no-daemon
           cp app/build/outputs/apk/debug/app-debug.apk ../StudyTrack_KK_Monitoring.apk
 
-      - name: Upload APK to Workflow Artifacts
+      - name: Upload APK to Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: StudyTrack-KK-Monitoring-APK
           path: StudyTrack_KK_Monitoring.apk
 
-      - name: Create GitHub Release with Downloadable APK
+      - name: Create GitHub Release with APK
         uses: softprops/action-gh-release@v2
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         with:
@@ -137,5 +134,5 @@ jobs:
           body: |
             ### StudyTrack (KK Creation) — Android APK
             - **Custom Logo (`KK CREATION`)** & **Glassmorphism Splash Screen (`StudyTrack`)** integrated.
-            - Download **`StudyTrack_KK_Monitoring.apk`** below and install it directly on your Android phone.
+            - Download **`StudyTrack_KK_Monitoring.apk`** below.
           files: StudyTrack_KK_Monitoring.apk
