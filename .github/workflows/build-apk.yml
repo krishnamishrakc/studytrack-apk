@@ -27,11 +27,41 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install Dependencies & Initialize Android Project
+      - name: Auto-Create Configuration & Sync Capacitor
         run: |
           mkdir -p www
-          cp -f *.html *.css *.js *.json *.png *.jpg www/ 2>/dev/null || true
-          npm install
+          find . -maxdepth 2 -name "*.html" -exec cp -f {} www/ \;
+          find . -maxdepth 2 -name "*.css" -exec cp -f {} www/ \;
+          find . -maxdepth 2 -name "*.js" -exec cp -f {} www/ \;
+          find . -maxdepth 2 -name "*.json" -exec cp -f {} www/ \;
+          find . -maxdepth 2 -name "*.png" -exec cp -f {} www/ \;
+          find . -maxdepth 2 -name "*.jpg" -exec cp -f {} www/ \;
+
+          if [ ! -f "package.json" ]; then
+            cat << 'EOF' > package.json
+          {
+            "name": "studytrack-kk-monitoring",
+            "version": "1.0.0",
+            "private": true
+          }
+          EOF
+          fi
+
+          if [ ! -f "capacitor.config.json" ]; then
+            cat << 'EOF' > capacitor.config.json
+          {
+            "appId": "com.kkcreation.studytrack",
+            "appName": "StudyTrack",
+            "webDir": "www",
+            "bundledWebRuntime": false,
+            "server": {
+              "androidScheme": "https"
+            }
+          }
+          EOF
+          fi
+
+          npm install @capacitor/core@6.1.2 @capacitor/cli@6.1.2 @capacitor/android@6.1.2
           npx cap add android || true
           npx cap sync android
 
@@ -43,15 +73,15 @@ jobs:
           else
             pip install pillow
             python3 - << 'EOF'
-          import os
+          import os, glob
           from PIL import Image, ImageDraw
 
           res_dir = "android/app/src/main/res"
-          logo_src = "logo.png" if os.path.exists("logo.png") else "icon-512.png"
-          splash_src = "splash.png" if os.path.exists("splash.png") else "splash.jpg"
+          logo_matches = glob.glob("**/logo.png", recursive=True) + glob.glob("**/icon-512.png", recursive=True) + glob.glob("**/icon-192.png", recursive=True)
+          splash_matches = glob.glob("**/splash.png", recursive=True) + glob.glob("**/splash.jpg", recursive=True)
 
-          if os.path.exists(logo_src):
-              logo_img = Image.open(logo_src).convert("RGBA")
+          if logo_matches and os.path.exists(logo_matches[0]):
+              logo_img = Image.open(logo_matches[0]).convert("RGBA")
               mipmap_specs = {
                   "mipmap-mdpi": (48, 108),
                   "mipmap-hdpi": (72, 162),
@@ -68,11 +98,13 @@ jobs:
                   out_sq = Image.new("RGBA", (icon_sz, icon_sz), (0, 0, 0, 0))
                   out_sq.paste(r_img, (0, 0), mask)
                   out_sq.save(os.path.join(fp, "ic_launcher.png"), "PNG")
+
                   mask_c = Image.new("L", (icon_sz, icon_sz), 0)
                   ImageDraw.Draw(mask_c).ellipse((0, 0, icon_sz - 1, icon_sz - 1), fill=255)
                   out_rd = Image.new("RGBA", (icon_sz, icon_sz), (0, 0, 0, 0))
                   out_rd.paste(r_img, (0, 0), mask_c)
                   out_rd.save(os.path.join(fp, "ic_launcher_round.png"), "PNG")
+
                   canvas = Image.new("RGBA", (fg_sz, fg_sz), (5, 11, 22, 255))
                   inner_sz = int(fg_sz * 0.68)
                   fg_resized = logo_img.resize((inner_sz, inner_sz), Image.Resampling.LANCZOS)
@@ -85,8 +117,8 @@ jobs:
               with open(os.path.join(val_dir, "ic_launcher_background.xml"), "w") as f:
                   f.write('<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#050B16</color>\n</resources>\n')
 
-          if os.path.exists(splash_src):
-              sp_img = Image.open(splash_src).convert("RGB")
+          if splash_matches and os.path.exists(splash_matches[0]):
+              sp_img = Image.open(splash_matches[0]).convert("RGB")
               drawable_specs = {
                   "drawable": (1080, 1920),
                   "drawable-port-mdpi": (320, 480),
