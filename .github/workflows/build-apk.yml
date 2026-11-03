@@ -1,0 +1,141 @@
+name: Build Android APK (StudyTrack - KK Creation)
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-android-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Java JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Capacitor & Sync Android Project
+        run: |
+          mkdir -p www
+          cp -f *.html *.css *.js *.json *.png *.jpg www/ 2>/dev/null || true
+          npm install
+          npx cap add android
+          npx cap sync android
+
+      - name: Inject Custom KK Creation Logo & StudyTrack Splash Screen
+        run: |
+          find android/app/src/main/res/mipmap-* -name "*.webp" -delete 2>/dev/null || true
+          if [ -d "android-res" ]; then
+            cp -rf android-res/* android/app/src/main/res/
+          else
+            pip install pillow
+            python3 - << 'EOF'
+          import os
+          from PIL import Image, ImageDraw
+
+          res_dir = "android/app/src/main/res"
+          logo_src = "logo.png" if os.path.exists("logo.png") else "icon-512.png"
+          splash_src = "splash.png" if os.path.exists("splash.png") else "splash.jpg"
+
+          if os.path.exists(logo_src):
+              logo_img = Image.open(logo_src).convert("RGBA")
+              mipmap_specs = {
+                  "mipmap-mdpi": (48, 108),
+                  "mipmap-hdpi": (72, 162),
+                  "mipmap-xhdpi": (96, 216),
+                  "mipmap-xxhdpi": (144, 324),
+                  "mipmap-xxxhdpi": (192, 432),
+              }
+              for folder, (icon_sz, fg_sz) in mipmap_specs.items():
+                  fp = os.path.join(res_dir, folder)
+                  os.makedirs(fp, exist_ok=True)
+                  r_img = logo_img.resize((icon_sz, icon_sz), Image.Resampling.LANCZOS)
+                  mask = Image.new("L", (icon_sz, icon_sz), 0)
+                  ImageDraw.Draw(mask).rounded_rectangle((0, 0, icon_sz - 1, icon_sz - 1), radius=int(icon_sz * 0.22), fill=255)
+                  out_sq = Image.new("RGBA", (icon_sz, icon_sz), (0, 0, 0, 0))
+                  out_sq.paste(r_img, (0, 0), mask)
+                  out_sq.save(os.path.join(fp, "ic_launcher.png"), "PNG")
+                  mask_c = Image.new("L", (icon_sz, icon_sz), 0)
+                  ImageDraw.Draw(mask_c).ellipse((0, 0, icon_sz - 1, icon_sz - 1), fill=255)
+                  out_rd = Image.new("RGBA", (icon_sz, icon_sz), (0, 0, 0, 0))
+                  out_rd.paste(r_img, (0, 0), mask_c)
+                  out_rd.save(os.path.join(fp, "ic_launcher_round.png"), "PNG")
+                  canvas = Image.new("RGBA", (fg_sz, fg_sz), (5, 11, 22, 255))
+                  inner_sz = int(fg_sz * 0.68)
+                  fg_resized = logo_img.resize((inner_sz, inner_sz), Image.Resampling.LANCZOS)
+                  off = (fg_sz - inner_sz) // 2
+                  canvas.paste(fg_resized, (off, off), fg_resized)
+                  canvas.save(os.path.join(fp, "ic_launcher_foreground.png"), "PNG")
+
+              val_dir = os.path.join(res_dir, "values")
+              os.makedirs(val_dir, exist_ok=True)
+              with open(os.path.join(val_dir, "ic_launcher_background.xml"), "w") as f:
+                  f.write('<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#050B16</color>\n</resources>\n')
+
+          if os.path.exists(splash_src):
+              sp_img = Image.open(splash_src).convert("RGB")
+              drawable_specs = {
+                  "drawable": (1080, 1920),
+                  "drawable-port-mdpi": (320, 480),
+                  "drawable-port-hdpi": (480, 800),
+                  "drawable-port-xhdpi": (720, 1280),
+                  "drawable-port-xxhdpi": (1080, 1920),
+                  "drawable-port-xxxhdpi": (1280, 1920),
+                  "drawable-land-mdpi": (480, 320),
+                  "drawable-land-hdpi": (800, 480),
+                  "drawable-land-xhdpi": (1280, 720),
+                  "drawable-land-xxhdpi": (1920, 1080),
+                  "drawable-land-xxxhdpi": (1920, 1280),
+              }
+              for folder, (w, h) in drawable_specs.items():
+                  fp = os.path.join(res_dir, folder)
+                  os.makedirs(fp, exist_ok=True)
+                  bg = sp_img.resize((w, h), Image.Resampling.BILINEAR)
+                  scale = min(w / sp_img.width, h / sp_img.height)
+                  nw, nh = int(sp_img.width * scale), int(sp_img.height * scale)
+                  fg = sp_img.resize((nw, nh), Image.Resampling.LANCZOS)
+                  bg.paste(fg, ((w - nw) // 2, (h - nh) // 2))
+                  bg.save(os.path.join(fp, "splash.png"), "PNG")
+          EOF
+          fi
+
+      - name: Build Installable APK with Gradle
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk ../StudyTrack_KK_Monitoring.apk
+
+      - name: Upload APK to Workflow Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudyTrack-KK-Monitoring-APK
+          path: StudyTrack_KK_Monitoring.apk
+
+      - name: Create GitHub Release with Downloadable APK
+        uses: softprops/action-gh-release@v2
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: "StudyTrack APK — Build #${{ github.run_number }}"
+          body: |
+            ### StudyTrack (KK Creation) — Android APK
+            - **Custom Logo (`KK CREATION`)** & **Glassmorphism Splash Screen (`StudyTrack`)** integrated.
+            - Download **`StudyTrack_KK_Monitoring.apk`** below and install it directly on your Android phone.
+          files: StudyTrack_KK_Monitoring.apk
