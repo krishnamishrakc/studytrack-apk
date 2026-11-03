@@ -1,0 +1,15 @@
+{
+  "name": "studytrack-kk-monitoring",
+  "version": "1.0.0",
+  "description": "StudyTrack - KK Monitoring Study Command Center Android APK",
+  "private": true,
+  "scripts": {
+    "build": "mkdir -p www && cp -r *.html *.css *.js *.json *.png *.jpg www/ 2>/dev/null || true"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/cli": "^6.1.2",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/splash-screen": "^6.0.2"
+  }
+}
